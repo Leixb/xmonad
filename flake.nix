@@ -1,27 +1,24 @@
 {
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
-
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
   };
+  outputs = { self, nixpkgs, flake-utils }:
 
-  outputs = { self, nixpkgs, ... }:
+  flake-utils.lib.eachDefaultSystem (system:
     let
-      system = "x86_64-linux";
-
       pkgs = import nixpkgs { inherit system; };
-    in
-    {
-      devShells.${system}.default = pkgs.mkShellNoCC {
-        name = "nixos";
-
-        buildInputs = with pkgs; [
-          nixpkgs-fmt
-          sops
+    in {
+      devShell = with pkgs; mkShellNoCC {
+        name = "xmonad";
+        buildInputs = [
+          haskell-language-server
+          (haskellPackages.ghcWithPackages (hpkgs: with hpkgs; [
+              xmobar
+              xmonad
+              xmonad-contrib
+          ]))
         ];
-
-        inherit (self.checks.${system}.pre-commit-check) shellHook;
       };
-
-    };
+    });
 }
