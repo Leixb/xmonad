@@ -4,6 +4,7 @@ import XMonad
 import XMonad.Actions.WithAll (killAll)
 import XMonad.Hooks.DynamicLog
 import XMonad.Hooks.EwmhDesktops
+import XMonad.Hooks.InsertPosition
 import XMonad.Hooks.ManageDocks
 import XMonad.Hooks.ManageHelpers
 import XMonad.Hooks.StatusBar
@@ -36,6 +37,19 @@ myLayout = layoutHintsToCenter $ smartBorders . avoidStruts . spacer $ mkToggle 
     threeCols = magnifiercz' 1.3 $ ThreeColMid nmaster delta ratio
     spacer = spacingRaw False (Border 10 0 10 0) True (Border 0 10 0 10) True
 
+myLayoutPrinter :: String -> String
+myLayoutPrinter "Full" = "F"
+myLayoutPrinter "Tall" = "T"
+myLayoutPrinter "Mirror Tall" = "MT"
+myLayoutPrinter "Spiral" = "S"
+myLayoutPrinter "Magnifier NoMaster ThreeCol" = "3C"
+myLayoutPrinter x = myLayoutPrinter $ stripPrefix "Spacing " x
+  where
+    stripPrefix :: String -> String -> String
+    stripPrefix [] s = s
+    stripPrefix _ [] = []
+    stripPrefix (p : ps) (s : ss) = if p == s then stripPrefix ps ss else s : ss
+
 myHandleEventHook =
   composeAll
     [ handleEventHook def,
@@ -49,7 +63,8 @@ scratchpads = [NS "scratchpad" "kitty --name scratchpad --class scratchpad" (cla
 
 myManageHook =
   composeAll
-    [ -- manageHook def,
+    [ manageHook def,
+      insertPosition Below Newer,
       isDialog --> doCenterFloat,
       isFullscreen --> doFullFloat,
       -- manageDocks,
@@ -118,6 +133,7 @@ myXmobarPP =
         ppVisible = wrap "(" ")",
         ppHidden = white . wrap " " "",
         ppHiddenNoWindows = lowWhite . wrap " " "",
+        ppLayout = myLayoutPrinter,
         ppUrgent = red . wrap (yellow "!") (yellow "!"),
         ppOrder = \[ws, l, _, wins] -> [ws, l, wins],
         ppExtras = [logTitles formatFocused formatUnfocused]
