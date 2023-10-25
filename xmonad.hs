@@ -1,6 +1,8 @@
 import Graphics.X11.ExtraTypes.XF86
 import System.Exit (exitSuccess)
 import XMonad
+import XMonad.Actions.CopyWindow
+import XMonad.Actions.WindowGo
 import XMonad.Actions.WithAll (killAll)
 import XMonad.Hooks.DynamicLog
 import XMonad.Hooks.EwmhDesktops
@@ -19,6 +21,7 @@ import XMonad.Layout.Spacing
 import XMonad.Layout.Spiral (spiral)
 import XMonad.Layout.ThreeColumns
 import XMonad.Operations
+import XMonad.Prelude (isPrefixOf, isSuffixOf)
 import XMonad.StackSet qualified as W
 import XMonad.Util.ClickableWorkspaces (clickablePP)
 import XMonad.Util.EZConfig
@@ -38,12 +41,14 @@ myLayout = layoutHintsToCenter $ smartBorders . avoidStruts . spacer $ mkToggle 
     spacer = spacingRaw False (Border 10 0 10 0) True (Border 0 10 0 10) True
 
 myLayoutPrinter :: String -> String
-myLayoutPrinter "Full" = "F"
-myLayoutPrinter "Tall" = "T"
-myLayoutPrinter "Mirror Tall" = "MT"
-myLayoutPrinter "Spiral" = "S"
-myLayoutPrinter "Magnifier NoMaster ThreeCol" = "3C"
-myLayoutPrinter x = myLayoutPrinter $ stripPrefix "Spacing " x
+myLayoutPrinter "Full" = "<icon=full.xbm/>"
+myLayoutPrinter "Tall" = "<icon=tall.xbm/>"
+myLayoutPrinter "Mirror Tall" = "<icon=mtall.xbm/>"
+myLayoutPrinter "Spiral" = "<icon=spiral.xbm/>"
+myLayoutPrinter "Magnifier NoMaster ThreeCol" = "<icon=threeCol.xbm/>"
+myLayoutPrinter x
+  | "Spacing" `isPrefixOf` x = myLayoutPrinter $ stripPrefix "Spacing " x
+  | otherwise = x
   where
     stripPrefix :: String -> String -> String
     stripPrefix [] s = s
@@ -70,7 +75,7 @@ myManageHook =
       -- manageDocks,
       (className =? "leagueclientux.exe") --> doCenterFloat,
       (className =? "Pavucontrol") --> doCenterFloat,
-      -- (className =? "league of legends.exe") --> doFullFloat,
+      (className =? "league of legends.exe") --> doFullFloat,
       namedScratchpadManageHook scratchpads
     ]
 
@@ -90,16 +95,19 @@ myStartupHook = restoreBackground -- <> trayer
 myKeymap =
   [ ("M-S-q", io exitSuccess),
     ("M-d", spawn "rofi -show"),
-    ("M-w", kill),
-    ("M-S-w", killAll),
+    ("M-w", kill1),
+    ("M-S-w", kill),
+    ("M-C-S-w", killAll),
     ("C-M1-l", spawn "i3lock-fancy-rapid 5 5"),
     -- ("M-b", sendMessage ToggleStruts),
     ("M-f", sendMessage $ Toggle NBFULL),
-    ("M-<Return>", spawn $ XMonad.terminal myConfig),
+    ("M-<Return>", spawn term),
     ("M-S-<Return>", windows W.swapMaster),
-    ("M-s", namedScratchpadAction scratchpads "scratchpad"),
-    -- ("M-a", scratchpadSpawnActionCustom "kitty --name scratchpad"),
     ("M-C-t", withFocused $ windows . W.sink),
+    ("M-s", namedScratchpadAction scratchpads "scratchpad"),
+    ("M-n", runOrRaiseNext (term ++ "nvim") (isSuffixOf "NVIM" <$> title <||> isSuffixOf "- NVIM\" " <$> title)),
+    ("M-b", runOrRaiseNext "firefox" (className =? "firefox")),
+    ("M-v", runOrRaiseNext term (className =? term)),
     -- Volume
     ("<XF86AudioLowerVolume>", spawn "amixer -q sset Master 5%-"),
     ("<XF86AudioRaiseVolume>", spawn "amixer -q sset Master 5%+"),
@@ -111,29 +119,41 @@ myKeymap =
     ("<XF86AudioPlay>", spawn "playerctl play-pause"),
     ("<XF86AudioNext>", spawn "playerctl next"),
     ("<XF86AudioPrev>", spawn "playerctl previous"),
-    ("<XF86AudioStop>", spawn "playerctl stop")
-    -- ("M-KP5", spawn "hass-cli state toggle light.desk_lamp")
+    ("<XF86AudioStop>", spawn "playerctl stop"),
+    ("M-<KP_5>", spawn "hass-cli state toggle light.desk_lamp")
   ]
+    -- Move to other screens
     ++ [ ("M-" ++ m ++ k, screenWorkspace sc >>= flip whenJust (windows . f))
          | (k, sc) <- zip ["e", "r", "t"] [0 ..],
            (f, m) <- [(W.view, ""), (W.shift, "S-")]
        ]
+    -- Copy client to other workspaces
+    ++ [ ("M-C-S-" ++ ws, windows $ copy ws)
+         | ws <- map show [1 .. 9]
+       ]
+  where
+    term = XMonad.terminal myConfig
 
 myWorkspaces = ["web", "code"] ++ map show [3 .. 9]
 
 myLogHook = dynamicLogWithPP . filterOutWsPP [scratchpadWorkspaceTag] $ def
 
 -- myXmobarPP :: PP
-myXmobarPP =
+myXmobarPP = do
+  copies <- wsContainingCopies
+  let check ws
+        | ws `elem` copies = pad . xmobarColor "red" "black" $ ws
+        | otherwise = white . pad $ ws
+
   clickablePP . filterOutWsPP [scratchpadWorkspaceTag] $
     def
       { ppSep = magenta " | ",
         ppTitleSanitize = xmobarStrip,
-        ppCurrent = wrap " " "" . xmobarBorder "Top" "#8BD5CA" 2,
+        ppCurrent = pad . xmobarBorder "Top" "#8BD5CA" 2,
         ppVisible = wrap "(" ")",
-        ppHidden = white . wrap " " "",
-        ppHiddenNoWindows = lowWhite . wrap " " "",
-        ppLayout = myLayoutPrinter,
+        ppHidden = check,
+        ppHiddenNoWindows = lowWhite . pad,
+        ppLayout = white . myLayoutPrinter,
         ppUrgent = red . wrap (yellow "!") (yellow "!"),
         ppOrder = \[ws, l, _, wins] -> [ws, l, wins],
         ppExtras = [logTitles formatFocused formatUnfocused]
@@ -178,7 +198,7 @@ main =
     . docks
     . ewmhFullscreen
     . ewmh
-    . withEasySB (statusBarProp "xmobar" myXmobarPP) defToggleStrutsKey
+    . withSB (statusBarProp "xmobar" myXmobarPP)
     $ myConfig
 
 myConfig =
