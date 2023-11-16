@@ -5,6 +5,7 @@ import Graphics.X11.ExtraTypes.XF86
 import System.Exit (exitSuccess)
 import XMonad
 import XMonad.Actions.CopyWindow
+import XMonad.Actions.DwmPromote (dwmpromote)
 import XMonad.Actions.WindowGo
 import XMonad.Actions.WithAll (killAll)
 import XMonad.Hooks.DynamicLog
@@ -14,7 +15,11 @@ import XMonad.Hooks.ManageDocks
 import XMonad.Hooks.ManageHelpers
 import XMonad.Hooks.StatusBar
 import XMonad.Hooks.StatusBar.PP
+import XMonad.Hooks.UrgencyHook (focusUrgent)
 import XMonad.Hooks.WindowSwallowing
+import XMonad.Layout.Accordion
+import XMonad.Layout.CenteredMaster (centerMaster)
+import XMonad.Layout.HintedGrid
 import XMonad.Layout.LayoutHints
 import XMonad.Layout.Magnifier (magnifiercz')
 import XMonad.Layout.MultiToggle
@@ -33,7 +38,7 @@ import XMonad.Util.NamedScratchpad
 import XMonad.Util.SpawnOnce (spawnOnce)
 import XMonad.Util.Ungrab
 
-myLayout = layoutHintsToCenter $ smartBorders . avoidStruts . spacer $ mkToggle (NBFULL ?? NOBORDERS ?? EOT) $ tiled ||| Mirror tiled ||| spiral (6 / 7) ||| threeCols ||| Full
+myLayout = smartBorders . avoidStruts . spacer . mkToggle (NBFULL ?? NOBORDERS ?? EOT) $ tiled ||| Mirror tiled ||| spiral (6 / 7) ||| Grid False ||| threeCols ||| Accordion ||| Full
   where
     tiled = Tall nmaster delta ratio
     nmaster = 1 -- Default number of windows in the master pane
@@ -48,6 +53,9 @@ myLayoutPrinter "Tall" = "<icon=tall.xbm/>"
 myLayoutPrinter "Mirror Tall" = "<icon=mtall.xbm/>"
 myLayoutPrinter "Spiral" = "<icon=spiral.xbm/>"
 myLayoutPrinter "Magnifier NoMaster ThreeCol" = "<icon=threeCol.xbm/>"
+myLayoutPrinter "Accordion" = "<icon=accordion.xbm/>"
+myLayoutPrinter "Grid False" = "<icon=grid.xbm/>"
+myLayoutPrinter "Grid" = "<icon=grid.xbm/>"
 myLayoutPrinter x
   | "Spacing" `isPrefixOf` x = myLayoutPrinter $ stripPrefix "Spacing " x
   | otherwise = x
@@ -104,12 +112,13 @@ myKeymap =
     -- ("M-b", sendMessage ToggleStruts),
     ("M-f", sendMessage $ Toggle NBFULL),
     ("M-<Return>", spawn term),
-    ("M-S-<Return>", windows W.swapMaster),
+    ("M-S-<Return>", dwmpromote),
     ("M-C-t", withFocused $ windows . W.sink),
     ("M-s", namedScratchpadAction scratchpads "scratchpad"),
-    ("M-n", runOrRaiseNext (term ++ "nvim") (isSuffixOf "NVIM" <$> title <||> isSuffixOf "- NVIM\" " <$> title)),
+    ("M-n", runOrRaiseNext (term ++ " nvim") (isSuffixOf "NVIM" <$> title <||> isSuffixOf "- NVIM\" " <$> title)),
     ("M-b", runOrRaiseNext "firefox" (className =? "firefox")),
     ("M-v", runOrRaiseNext term (className =? term)),
+    ("M-u", focusUrgent),
     -- Volume
     ("<XF86AudioLowerVolume>", spawn "amixer -q sset Master 5%-"),
     ("<XF86AudioRaiseVolume>", spawn "amixer -q sset Master 5%+"),
