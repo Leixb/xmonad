@@ -17,6 +17,7 @@
               xmobar
               xmonad
               xmonad-contrib
+              taffybar
           ]))
         ];
       };
