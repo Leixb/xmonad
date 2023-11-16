@@ -1,3 +1,6 @@
+{-# LANGUAGE LambdaCase #-}
+{-# OPTIONS_GHC -Wno-deprecations #-}
+
 import Graphics.X11.ExtraTypes.XF86
 import System.Exit (exitSuccess)
 import XMonad
@@ -20,8 +23,7 @@ import XMonad.Layout.NoBorders
 import XMonad.Layout.Spacing
 import XMonad.Layout.Spiral (spiral)
 import XMonad.Layout.ThreeColumns
-import XMonad.Operations
-import XMonad.Prelude (isPrefixOf, isSuffixOf)
+import XMonad.Prelude
 import XMonad.StackSet qualified as W
 import XMonad.Util.ClickableWorkspaces (clickablePP)
 import XMonad.Util.EZConfig
@@ -59,7 +61,6 @@ myHandleEventHook =
   composeAll
     [ handleEventHook def,
       swallowEventHook (className =? "kitty" <||> className =? "Alacritty") (return True),
-      hintsEventHook,
       trayerAboveXmobarEventHook,
       trayerPaddingXmobarEventHook
     ]
@@ -74,8 +75,9 @@ myManageHook =
       isFullscreen --> doFullFloat,
       -- manageDocks,
       (className =? "leagueclientux.exe") --> doCenterFloat,
+      (className =? "riotclientux.exe") --> doCenterFloat,
       (className =? "Pavucontrol") --> doCenterFloat,
-      (className =? "league of legends.exe") --> doFullFloat,
+      -- (className =? "league of legends.exe") --> doFullFloat,
       namedScratchpadManageHook scratchpads
     ]
 
@@ -193,10 +195,27 @@ myXmobarPP = do
 -- color14 = "#C6A0F6"; # mauve
 -- color15 = "#F0C6C6"; # flamingo
 
+-- For some reason, the league clients do not work with ewmh fullscreen,
+-- despite being floating, they get back into tiling mode when some action
+-- if performed. By skipping ewmh fullscreen for these clients, we can
+-- avoid this issue:
+myEwmhFullscreen :: XConfig a -> XConfig a
+myEwmhFullscreen c =
+  c
+    { startupHook = startupHook c <+> fullscreenStartup,
+      handleEventHook = handleEventHook c <+> fullscreenEventHookNoLeagueClient
+    }
+  where
+    fullscreenEventHookNoLeagueClient :: Event -> X All
+    fullscreenEventHookNoLeagueClient ev@(ClientMessageEvent {ev_event_display = dpy, ev_window = win}) =
+      liftIO ((`elem` ["leagueclientux.exe", "riotclientux.exe"]) . resClass <$> getClassHint dpy win) >>= \case
+        True -> return $ All True
+        False -> fullscreenEventHook ev
+
 main =
   xmonad
     . docks
-    . ewmhFullscreen
+    . myEwmhFullscreen
     . ewmh
     . withSB (statusBarProp "xmobar" myXmobarPP)
     $ myConfig
